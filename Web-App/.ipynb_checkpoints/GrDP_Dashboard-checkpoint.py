@@ -29,7 +29,7 @@ RelDifference_for_decoupling = pd.read_csv('https://raw.githubusercontent.com/An
 ############################
 
 # Title
-st.title("Going beyond the GDP with the GrDP: Factoring health and environmental costs in economic success Testing")
+st.title("Going beyond the GDP with the GrDP: Factoring health and environmental costs in economic success")
 
 st.image("https://viewpointvancouver.ca/wp-content/uploads/2012/11/new-yorker-shareholder-value.jpg", caption="Source: New Yorker", use_column_width=True)
 #st.image("https://dwighttowers.wordpress.com/wp-content/uploads/2011/05/polyp_cartoon_economic_growth_ecology.jpg?w=450&h=359", caption="Source: Dwighttowers", use_column_width=True)
