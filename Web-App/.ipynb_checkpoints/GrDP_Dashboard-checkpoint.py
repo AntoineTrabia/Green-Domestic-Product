@@ -6,9 +6,6 @@ import plotly.express as px
 import seaborn as sns
 import re
 
-# Set seaborn theme
-sns.set_theme()
-
 # Load data
 Emissions = pd.read_csv('https://raw.githubusercontent.com/AntoineTrabia/Green-Domestic-Product/main/data_final/Emissions.csv')
 External_costs = pd.read_csv('https://raw.githubusercontent.com/AntoineTrabia/Green-Domestic-Product/main/data_final/ExternalCosts.csv')
@@ -67,6 +64,7 @@ st.markdown("> What we measure affects what we do; and if our measurements are f
 st.markdown("<div style='text-align: right;'> Stiglitz, Sen, Fitoussi et al., 2009. <a href='https://ec.europa.eu/eurostat/documents/8131721/8131772/Stiglitz-Sen-Fitoussi-Commission-report.pdf'>Report by the Commission on the Measurement of Economic Performance and Social Progress</a>. p7</div>", unsafe_allow_html=True)
 
 st.markdown("""
+
 With E4S, we propose a novel indicator, the Green Domestic Product (GrDP), to remedy some of the shortcomings of GDP. The GrDP is calculated by subtracting the external costs associated with producing goods and services from the standard measurement of GDP. The current scope of the GrDP includes the emissions of greenhouse gases (GHG), air pollutants, and heavy metals. The impacts covered include climate change, health issues, decrease in crops’ yields and biomass production, buildings degradation, and damages to ecosystems due to eutrophication. You can learn more about the GrDP, including a detailed description of the method used, data scources, and assumptions, on the [E4S webpage Green Domestic Product](https://e4s.center/resources/reports/green-domestic-product/). 
 """)
 
@@ -120,7 +118,8 @@ selected_option = st.radio("Select display option:", options)
 # Select GHG data 
 GHG_data = Emissions.loc[:,['countries', 'Year', 'Territorial GHG emissions [t]', 'Residential GHG emissions [t]', 'Footprint GHG emissions [t]', 'Transfer GHG emissions [t]']]
 GHG_data['Transfer GHG emissions [t]'] *= -1
-unique_countries = sorted(Emissions['countries'].unique())
+unique_countries = sorted(External_costs['countries'].unique())
+GHG_data = GHG_data.loc[GHG_data.countries.isin(unique_countries)]
 
 # Depending on the selected option, display the corresponding content
 if selected_option == 'Evolution of GHG emissions':     # Plot of the evolution of GHG
@@ -131,10 +130,13 @@ if selected_option == 'Evolution of GHG emissions':     # Plot of the evolution 
     country_data = GHG_data[GHG_data['countries'] == selected_country]
     # Create traces for different emissions
     traces = [
-        go.Scatter(x=country_data['Year'], y=country_data['Territorial GHG emissions [t]'], mode='lines', name='Territorial Emissions'),
-        go.Scatter(x=country_data['Year'], y=country_data['Residential GHG emissions [t]'], mode='lines', name='Residential Emissions'),
-        go.Scatter(x=country_data['Year'], y=country_data['Footprint GHG emissions [t]'], mode='lines', name='Footprint Emissions')
-    ]
+    go.Scatter(x=country_data['Year'], y=country_data['Territorial GHG emissions [t]'], mode='lines', name='Territorial Emissions',
+               line=dict(color='rgb(31, 119, 180)')),  # Blue
+    go.Scatter(x=country_data['Year'], y=country_data['Residential GHG emissions [t]'], mode='lines', name='Residential Emissions',
+               line=dict(color='rgb(255, 127, 14)')),  # Orange
+    go.Scatter(x=country_data['Year'], y=country_data['Footprint GHG emissions [t]'], mode='lines', name='Footprint Emissions',
+               line=dict(color='rgb(44, 160, 44)'))  # Green
+]
     # Create layout
     layout = go.Layout(
         title=f'GHG emissions of {selected_country}',
@@ -156,25 +158,50 @@ elif selected_option == 'Map':            # Map of European countries
         else:
             color_scale = px.colors.sequential.Oranges  # Shades of orange for GHG emissions
             range_col = (0, GHG_data[['Territorial GHG emissions [t]', 'Residential GHG emissions [t]', 'Footprint GHG emissions [t]']].max().max()) # Range to fix the legend independently of years
+
+        # Define the min and max values for the color range per year
+        GHG_data['min_value'] = GHG_data.groupby('Year')[column].transform('min')
+        GHG_data['max_value'] = GHG_data.groupby('Year')[column].transform('max')
+
         # Create map
-        fig = px.choropleth(GHG_data,
-                            locations='countries',
-                            locationmode='country names',
-                            color=column,
-                            hover_name='countries',
-                            animation_frame='Year',
-                            title="",
-                            color_continuous_scale=color_scale,
-                            range_color=range_col,
-                            scope='europe',
-                            height=600,
-                            width=800)
-        # Udpdate Layout
-        fig.update_coloraxes(colorbar_title=selected_scenario)
-        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-        fig.update_geos(projection_scale=1) 
+        fig = px.choropleth(
+            GHG_data,
+            locations='countries',
+            locationmode='country names',
+            color=column,
+            hover_name='countries',
+            animation_frame='Year',  # Assuming 'Year' is the column name
+            title="",
+            color_continuous_scale=px.colors.sequential.Oranges,
+            scope='europe',
+            height=600,
+            width=800
+        )
+
+        # Adjust the color range for each frame
+        for frame in fig.frames:
+            year = frame.name
+            year_data = GHG_data[GHG_data['Year'] == year]
+
+            # Check if the slice is not empty
+            if not year_data.empty:
+                min_value = year_data['min_value'].iloc[0]
+                max_value = year_data['max_value'].iloc[0]
+                frame.data[0].zmin = min_value
+                frame.data[0].zmax = max_value
+            else:
+                # Set default min and max if data is not available for the year
+                frame.data[0].zmin = GHG_data[column].min()
+                frame.data[0].zmax = GHG_data[column].max()
+        
+        # Update Layout
+        fig.update_coloraxes(colorbar_title=column)
+        fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+        fig.update_geos(projection_scale=1)
+
         # Display plotly chart
         st.plotly_chart(fig, use_container_width=True)
+        
     plot_map(selected_scenario)
 elif selected_option == 'Table':   # Dataframe with data
     all_countries_option = "All countries"
@@ -207,6 +234,7 @@ selected_option_AP = st.radio("Select display option:", options_AP)
 # Select air pollutant data 
 AP_data = Emissions.loc[:,['countries', 'Year', 'PM2.5 [t]',  'PM10 [t]', 'SOx [t]', 'NH3 [t]', 'NOx [t]', 'NMVOC [t]', 'As [t]', 'Cd [t]', 'Cr [t]', 'Pb [t]', 'Hg [t]', 'Ni [t]']]
 AP_list = ['PM2.5',  'PM10', 'SOx', 'NH3', 'NOx', 'NMVOC', 'As', 'Cd', 'Cr', 'Pb', 'Hg', 'Ni']
+AP_data = AP_data.loc[AP_data.countries.isin(unique_countries)]
 default_pollutant = 'PM2.5'
 unique_countries_AP = unique_countries
 default_country_AP = 'Switzerland'
@@ -232,32 +260,56 @@ if selected_option_AP == 'Evolution of air pollutant emissions':     # Plot of t
     )
     # Plot graph
     st.plotly_chart({'data': traces_AP, 'layout': layout_AP}, use_container_width=True)
-elif selected_option_AP == 'Map':            # Map of European countries
-    # Define function to plot map
+elif selected_option_AP == 'Map': # Map of European countries
+    
     def plot_map_AP(column):
+        # Define the min and max values for the color range per year
+        AP_data['min_value'] = AP_data.groupby('Year')[column].transform('min')
+        AP_data['max_value'] = AP_data.groupby('Year')[column].transform('max')
+
         # Create map
-        fig = px.choropleth(AP_data,
-                            locations='countries',
-                            locationmode='country names',
-                            color=column,
-                            hover_name='countries',
-                            animation_frame='Year',
-                            title="",
-                            color_continuous_scale=px.colors.sequential.Oranges,
-                            range_color=(0, AP_data[selected_pollutant_col].max()),
-                            scope='europe',
-                            height=600,
-                            width=800)
-        # Udpdate Layout
-        fig.update_coloraxes(colorbar_title=selected_pollutant_col)
-        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-        fig.update_geos(projection_scale=1) 
+        fig = px.choropleth(
+            AP_data,
+            locations='countries',
+            locationmode='country names',
+            color=column,
+            hover_name='countries',
+            animation_frame='Year',  # Assuming 'Year' is the column name
+            title="",
+            color_continuous_scale=px.colors.sequential.Oranges,
+            scope='europe',
+            height=600,
+            width=800
+        )
+
+        # Adjust the color range for each frame
+        for frame in fig.frames:
+            year = frame.name
+            year_data = AP_data[AP_data['Year'] == year]
+
+            # Check if the slice is not empty
+            if not year_data.empty:
+                min_value = year_data['min_value'].iloc[0]
+                max_value = year_data['max_value'].iloc[0]
+                frame.data[0].zmin = min_value
+                frame.data[0].zmax = max_value
+            else:
+                # Set default min and max if data is not available for the year
+                frame.data[0].zmin = AP_data[column].min()
+                frame.data[0].zmax = AP_data[column].max()
+        
+        # Update Layout
+        fig.update_coloraxes(colorbar_title=column)
+        fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+        fig.update_geos(projection_scale=1)
+
         # Display plotly chart
         st.plotly_chart(fig, use_container_width=True)
+
     plot_map_AP(selected_pollutant_col)
 elif selected_option_AP == 'Table':   # Dataframe with data
     all_countries_option = "All countries"
-    selected_countries = st.multiselect("Select countries:", [all_countries_option] + unique_countries, default=all_countries_option)
+    selected_countries = st.multiselect("Select countries:", [all_countries_option] + unique_countries, default=all_countries_option, key='table_air_pol')
     if all_countries_option in selected_countries:
         filtered_data = AP_data.copy()  # Make a copy of the original DataFrame
     else:
@@ -281,99 +333,31 @@ For the main air pollutants and heavy metals, we rely on the damage costs, i.e.,
 
 For greenhouse gases, we rely on avoidance costs, i.e., the costs to prevent externalities by decarbonizing, for two main reasons. First, damage costs are prone to significant uncertainties, with values from the literature ranging from a few euros to several thousand euros per ton of CO2. Second, international agreements have the goal to limit global temperature rise to 1.5-2°C above pre-industrial levels, thus preventing catastrophic climate change impacts. To account for uncertainties in the cost of decarbonization, we estimated the external costs with three values, taken from the European Commission report [Handbook on the external costs of transport (2020)](https://op.europa.eu/en/publication-detail/-/publication/9781f65f-8448-11ea-bf12-01aa75ed71a1/language-en): low (63 €/tCO2eq), central (104 €/tCO2eq), and high (524 €/tCO2eq).
 """)
-    
-# Option to select between 'Euro' and '% of GDP'
-options = ['Euro', '% of GDP']
-selected_metric = st.radio("Select metric:", options, key="radio_metric_EC")
 
-if selected_metric == 'Euro':
-    # Option to select graph for external costs
-    options_EC = ['Evolution of external costs', 'Map', 'Table']
-    selected_option_EC = st.radio("Select display option:", options_EC, key="radio_EC")
+# Option to select graph for external costs
+options_EC = ['Evolution of external costs', 'Map', 'Table']
+selected_option_EC = st.radio("Select display option:", options_EC, key="radio_EC")
 
-    # Select External Costs data
-    EC_data = External_costs.loc[:, ['countries', 'Year', 'External costs (Territorial & Low GHG with VOLY) scenario [Euro]',
-           'External costs (Territorial & Low GHG with VSL) scenario [Euro]',
-           'External costs (Territorial & Central GHG with VOLY) scenario [Euro]',
-           'External costs (Territorial & Central GHG with VSL) scenario [Euro]',
-           'External costs (Territorial & High GHG with VOLY) scenario [Euro]',
-           'External costs (Territorial & High GHG with VSL) scenario [Euro]',
-           'External costs (Residential & Low GHG with VOLY) scenario [Euro]',
-           'External costs (Residential & Low GHG with VSL) scenario [Euro]',
-           'External costs (Residential & Central GHG with VOLY) scenario [Euro]',
-           'External costs (Residential & Central GHG with VSL) scenario [Euro]',
-           'External costs (Residential & High GHG with VOLY) scenario [Euro]',
-           'External costs (Residential & High GHG with VSL) scenario [Euro]',
-           'External costs (Footprint & Low GHG with VOLY) scenario [Euro]',
-           'External costs (Footprint & Low GHG with VSL) scenario [Euro]',
-           'External costs (Footprint & Central GHG with VOLY) scenario [Euro]',
-           'External costs (Footprint & Central GHG with VSL) scenario [Euro]',
-           'External costs (Footprint & High GHG with VOLY) scenario [Euro]',
-           'External costs (Footprint & High GHG with VSL) scenario [Euro]']]
-    EC_list = ['Territorial & Low GHG with VOLY', 'Territorial & Low GHG with VSL', 'Territorial & Central GHG with VOLY', 'Territorial & Central GHG with VSL', 'Territorial & High GHG with VOLY', 'Territorial & High GHG with VSL', 'Residential & Low GHG with VOLY', 'Residential & Low GHG with VSL', 'Residential & Central GHG with VOLY', 'Residential & Central GHG with VSL', 'Residential & High GHG with VOLY', 'Residential & High GHG with VSL', 'Footprint & Low GHG with VOLY', 'Footprint & Low GHG with VSL', 'Footprint & Central GHG with VOLY', 'Footprint & Central GHG with VSL', 'Footprint & High GHG with VOLY', 'Footprint & High GHG with VSL']
-    default_scenario_EC = 'Territorial & Central GHG with VSL'
-    unique_countries_EC = unique_countries
-    default_country_EC = 'Switzerland'
-    selected_scenario_EC = st.selectbox("Select a scenario:", EC_list, index=EC_list.index(default_scenario_EC), key="select_scenario_EC")
-    selected_scenario_col_EC = 'External costs (' + selected_scenario_EC + ') scenario [Euro]'
-
-    # Depending on the selected option, display the corresponding content
-    if selected_option_EC == 'Evolution of external costs':  # Plot of the evolution of air pollutant
-        # Selection of country
-        selected_country_EC = st.selectbox("Select a country:", unique_countries_EC, index=unique_countries_EC.index(default_country_EC), key='country_EC_selectbox')
-        # Filter data based on selected country
-        country_data_EC = EC_data.loc[EC_data['countries'] == selected_country_EC, ['Year', selected_scenario_col_EC]]
-        # Create traces for different emissions
-        traces_EC = [
-            go.Scatter(x=country_data_EC['Year'], y=country_data_EC[selected_scenario_col_EC], mode='lines', name=selected_scenario_EC)
-        ]
-        # Create layout
-        layout_EC = go.Layout(
-            title=f'External costs ({selected_scenario_EC} scenario) in {selected_country_EC}',
-            xaxis=dict(title='Year'),
-            yaxis=dict(title='Euro', rangemode='tozero'),  # Fix minimum y-axis value at zero
-            margin=dict(l=40, r=40, t=40, b=30)
-        )
-        # Plot graph
-        st.plotly_chart({'data': traces_EC, 'layout': layout_EC}, use_container_width=True)
-    elif selected_option_EC == 'Map':  # Map of European countries
-        # Define function to plot map
-        def plot_map_EC(column):
-            # Create map
-            fig = px.choropleth(EC_data,
-                                locations='countries',
-                                locationmode='country names',
-                                color=column,
-                                hover_name='countries',
-                                animation_frame='Year',
-                                title="",
-                                color_continuous_scale=px.colors.sequential.Oranges,
-                                range_color=(0, EC_data[selected_scenario_col_EC].max()),
-                                scope='europe',
-                                height=600,
-                                width=800)
-            # Update Layout
-            fig.update_coloraxes(colorbar_title='External costs [Euro]')
-            fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
-            fig.update_geos(projection_scale=1)
-            # Display plotly chart
-            st.plotly_chart(fig, use_container_width=True)
-        plot_map_EC(selected_scenario_col_EC)
-    elif selected_option_EC == 'Table':  # Dataframe with data
-        all_countries_option = "All countries"
-        selected_countries = st.multiselect("Select countries:", [all_countries_option] + unique_countries_EC, default=all_countries_option, key='multi_country_EC')
-        if all_countries_option in selected_countries:
-            filtered_data_EC = EC_data.copy()  # Make a copy of the original DataFrame
-        else:
-            filtered_data_EC = EC_data[EC_data['countries'].isin(selected_countries)]
-        st.write(filtered_data_EC)
-else:
-    # Option to select graph for external costs as % of GDP
-    options_ECP = ['Evolution of external costs as % of GDP', 'Map', 'Table']
-    selected_option_ECP = st.radio("Select display option:", options_ECP, key="radio_ECP")
-
-    # Select External Costs data 
-    ECP_data = External_costs.loc[:, ['countries', 'Year', '(Territorial & Low GHG with VOLY) scenario [%]',
+# Select External Costs data
+EC_data = External_costs.loc[:, ['countries', 'Year', 'External costs (Territorial & Low GHG with VOLY) scenario [Euro]',
+       'External costs (Territorial & Low GHG with VSL) scenario [Euro]',
+       'External costs (Territorial & Central GHG with VOLY) scenario [Euro]',
+       'External costs (Territorial & Central GHG with VSL) scenario [Euro]',
+       'External costs (Territorial & High GHG with VOLY) scenario [Euro]',
+       'External costs (Territorial & High GHG with VSL) scenario [Euro]',
+       'External costs (Residential & Low GHG with VOLY) scenario [Euro]',
+       'External costs (Residential & Low GHG with VSL) scenario [Euro]',
+       'External costs (Residential & Central GHG with VOLY) scenario [Euro]',
+       'External costs (Residential & Central GHG with VSL) scenario [Euro]',
+       'External costs (Residential & High GHG with VOLY) scenario [Euro]',
+       'External costs (Residential & High GHG with VSL) scenario [Euro]',
+       'External costs (Footprint & Low GHG with VOLY) scenario [Euro]',
+       'External costs (Footprint & Low GHG with VSL) scenario [Euro]',
+       'External costs (Footprint & Central GHG with VOLY) scenario [Euro]',
+       'External costs (Footprint & Central GHG with VSL) scenario [Euro]',
+       'External costs (Footprint & High GHG with VOLY) scenario [Euro]',
+       'External costs (Footprint & High GHG with VSL) scenario [Euro]',
+       '(Territorial & Low GHG with VOLY) scenario [%]',
        '(Territorial & Low GHG with VSL) scenario [%]',
        '(Territorial & Central GHG with VOLY) scenario [%]',
        '(Territorial & Central GHG with VSL) scenario [%]',
@@ -391,64 +375,110 @@ else:
        '(Footprint & Central GHG with VSL) scenario [%]',
        '(Footprint & High GHG with VOLY) scenario [%]',
        '(Footprint & High GHG with VSL) scenario [%]']]
-    ECP_list = ['Territorial & Low GHG with VOLY', 'Territorial & Low GHG with VSL', 'Territorial & Central GHG with VOLY', 'Territorial & Central GHG with VSL', 'Territorial & High GHG with VOLY', 'Territorial & High GHG with VSL', 'Residential & Low GHG with VOLY', 'Residential & Low GHG with VSL', 'Residential & Central GHG with VOLY', 'Residential & Central GHG with VSL', 'Residential & High GHG with VOLY', 'Residential & High GHG with VSL', 'Footprint & Low GHG with VOLY', 'Footprint & Low GHG with VSL', 'Footprint & Central GHG with VOLY', 'Footprint & Central GHG with VSL', 'Footprint & High GHG with VOLY', 'Footprint & High GHG with VSL']
-    default_scenario_ECP = 'Territorial & Central GHG with VSL'
-    unique_countries_ECP = unique_countries
-    default_country_ECP = 'Switzerland'
-    selected_scenario_ECP = st.selectbox("Select a scenario:", ECP_list, index=ECP_list.index(default_scenario_ECP), key="select_scenario_ECP")
-    selected_scenario_col_ECP = '(' + selected_scenario_ECP + ') scenario [%]'
+EC_list = ['Territorial & Low GHG with VOLY', 'Territorial & Low GHG with VSL', 'Territorial & Central GHG with VOLY', 'Territorial & Central GHG with VSL', 'Territorial & High GHG with VOLY', 'Territorial & High GHG with VSL', 'Residential & Low GHG with VOLY', 'Residential & Low GHG with VSL', 'Residential & Central GHG with VOLY', 'Residential & Central GHG with VSL', 'Residential & High GHG with VOLY', 'Residential & High GHG with VSL', 'Footprint & Low GHG with VOLY', 'Footprint & Low GHG with VSL', 'Footprint & Central GHG with VOLY', 'Footprint & Central GHG with VSL', 'Footprint & High GHG with VOLY', 'Footprint & High GHG with VSL']
+default_scenario_EC = 'Territorial & Central GHG with VSL'
+unique_countries_EC = EC_data['countries'].unique()
+default_country_EC = 'Switzerland'
+selected_scenario_EC = st.selectbox("Select a scenario:", EC_list, index=EC_list.index(default_scenario_EC), key="select_scenario_EC")
 
-    # Depending on the selected option, display the corresponding content
-    if selected_option_ECP == 'Evolution of external costs as % of GDP':  # Plot of the evolution of air pollutant
-        # Selection of country
-        selected_country_ECP = st.selectbox("Select a country:", unique_countries_ECP, index=unique_countries_ECP.index(default_country_ECP), key='country_ECP_selectbox')
-        # Filter data based on selected country
-        country_data_ECP = ECP_data.loc[ECP_data['countries'] == selected_country_ECP, ['Year', selected_scenario_col_ECP]]
-        # Create traces for different emissions
-        traces_ECP = [
-            go.Scatter(x=country_data_ECP['Year'], y=country_data_ECP[selected_scenario_col_ECP], mode='lines', name=selected_scenario_ECP)
-        ]
+# Depending on the selected option, display the corresponding content
+if selected_option_EC == 'Evolution of external costs':  # Plot of the evolution of air pollutant
+    # Selection of countries
+    selected_countries_EC = st.multiselect("Select countries:", unique_countries_EC, default=[default_country_EC], key='countries_EC_multiselect')
+    # Option to select between 'Euro' and '% of GDP'
+    options_metric_EC = ['Euro', '% of GDP']
+    selected_metric = st.selectbox("Select metric:", options_metric_EC, key="radio_metric_EC")
+    if selected_metric == 'Euro':
+        selected_scenario_col_EC = 'External costs (' + selected_scenario_EC + ') scenario [Euro]'
+        
         # Create layout
-        layout_ECP = go.Layout(
-            title=f'External costs as % of GDP ({selected_scenario_ECP} scenario) in {selected_country_ECP}',
-            xaxis=dict(title='Year'),
-            yaxis=dict(title='% of GDP', rangemode='tozero'),  # Fix minimum y-axis value at zero
-            margin=dict(l=40, r=40, t=40, b=30)
-        )
-        # Plot graph
-        st.plotly_chart({'data': traces_ECP, 'layout': layout_ECP}, use_container_width=True)
-    elif selected_option_ECP == 'Map':  # Map of European countries
-        # Define function to plot map
-        def plot_map_ECP(column):
-            # Create map
-            fig = px.choropleth(ECP_data,
-                                locations='countries',
-                                locationmode='country names',
-                                color=column,
-                                hover_name='countries',
-                                animation_frame='Year',
-                                title="",
-                                color_continuous_scale=px.colors.sequential.Oranges,
-                                range_color=(0, ECP_data[selected_scenario_col_ECP].max()),
-                                scope='europe',
-                                height=600,
-                                width=800)
-            # Update Layout
-            fig.update_coloraxes(colorbar_title='External costs [% of GDP]')
-            fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
-            fig.update_geos(projection_scale=1)
-            # Display plotly chart
-            st.plotly_chart(fig, use_container_width=True)
-        plot_map_ECP(selected_scenario_col_ECP)
-    elif selected_option_ECP == 'Table':  # Dataframe with data
-        all_countries_option = "All countries"
-        selected_countries = st.multiselect("Select countries:", [all_countries_option] + unique_countries_ECP, default=all_countries_option, key='multi_country_ECP')
-        if all_countries_option in selected_countries:
-            filtered_data_ECP = ECP_data.copy()  # Make a copy of the original DataFrame
-        else:
-            filtered_data_ECP = ECP_data[ECP_data['countries'].isin(selected_countries)]
-        st.write(filtered_data_ECP)
+        layout_EC = go.Layout(
+        title=f'External costs ({selected_scenario_EC} scenario) in selected countries in Euros',
+        xaxis=dict(title='Year'),
+        yaxis=dict(title='Euro', rangemode='tozero'),  # Fix minimum y-axis value at zero
+        margin=dict(l=40, r=40, t=40, b=30)
+    )
+    else:
+        selected_scenario_col_EC = '(' + selected_scenario_EC + ') scenario [%]'
+        # Create layout
+        layout_EC = go.Layout(
+        title=f'External costs ({selected_scenario_EC} scenario) in selected countries as % of GDP',
+        xaxis=dict(title='Year'),
+        yaxis=dict(title='% of GDP', rangemode='tozero'),  # Fix minimum y-axis value at zero
+        margin=dict(l=40, r=40, t=40, b=30)
+    )
+    # Create traces for different countries
+    traces_EC = []
+    for country in selected_countries_EC:
+        country_data_EC = EC_data.loc[EC_data['countries'] == country, ['Year', selected_scenario_col_EC]]
+        traces_EC.append(go.Scatter(x=country_data_EC['Year'], y=country_data_EC[selected_scenario_col_EC], mode='lines', name=country))
+    # Plot graph
+    st.plotly_chart({'data': traces_EC, 'layout': layout_EC}, use_container_width=True)
+elif selected_option_EC == 'Map':  # Map of European countries
+    # Option to select between 'Euro' and '% of GDP'
+    options_metric_EC = ['% of GDP', 'Euro']
+    selected_metric = st.selectbox("Select metric:", options_metric_EC, key="radio_metric_EC")
+    if selected_metric == 'Euro':
+        selected_scenario_col_EC = 'External costs (' + selected_scenario_EC + ') scenario [Euro]'
+        title_EC = 'External costs [Euro]'
+    else:
+        selected_scenario_col_EC = '(' + selected_scenario_EC + ') scenario [%]'
+        title_EC = 'External costs [% of GDP]'
+    # Define function to plot map
+    def plot_map_EC(column):
+        # Define the min and max values for the color range per year
+        EC_data['min_value'] = EC_data.groupby('Year')[column].transform('min')
+        EC_data['max_value'] = EC_data.groupby('Year')[column].transform('max')
 
+        # Create map
+        fig = px.choropleth(
+            EC_data,
+            locations='countries',
+            locationmode='country names',
+            color=column,
+            hover_name='countries',
+            animation_frame='Year',  # Assuming 'Year' is the column name
+            title="",
+            color_continuous_scale=px.colors.sequential.Oranges,
+            scope='europe',
+            height=600,
+            width=800
+        )
+
+        # Adjust the color range for each frame
+        for frame in fig.frames:
+            year = frame.name
+            year_data = EC_data[EC_data['Year'] == year]
+
+            # Check if the slice is not empty
+            if not year_data.empty:
+                min_value = year_data['min_value'].iloc[0]
+                max_value = year_data['max_value'].iloc[0]
+                frame.data[0].zmin = min_value
+                frame.data[0].zmax = max_value
+            else:
+                # Set default min and max if data is not available for the year
+                frame.data[0].zmin = EC_data[column].min()
+                frame.data[0].zmax = EC_data[column].max()
+        
+        # Update Layout
+        fig.update_coloraxes(colorbar_title=title_EC)
+        fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+        fig.update_geos(projection_scale=1)
+
+        # Display plotly chart
+        st.plotly_chart(fig, use_container_width=True)
+       
+    plot_map_EC(selected_scenario_col_EC)
+    
+elif selected_option_EC == 'Table':  # Dataframe with data
+    all_countries_option = "All countries"
+    selected_countries = st.multiselect("Select countries:", [all_countries_option] + list(unique_countries_EC), default=all_countries_option)
+    if all_countries_option in selected_countries:
+        filtered_data = EC_data.copy()  # Make a copy of the original DataFrame
+    else:
+        filtered_data = EC_data[EC_data['countries'].isin(selected_countries)]
+    st.write(filtered_data)
 
     
 ############################################
@@ -465,186 +495,190 @@ GrDP = GDP - External Costs
 $$
 """)
 
+   
+options_GrDP = ['Evolution GDP and GrDP', 'Map', 'Table']
+selected_option_GrDP = st.radio("Select display option:", options_GrDP, key="radio_total")
 
-# Option to select between 'Total' and 'Per capita'
-options = ['Total', 'Per capita']
-selected_metric = st.radio("Select metric:", options, key="radio_metric_GrDP")
+# Select GrDP and GDP data 
+GrDP_data = GrDP.loc[:, ['countries', 'Year', 'GrDP (Territorial & Low GHG with VOLY) scenario [Euro]',
+       'GrDP (Territorial & Low GHG with VSL) scenario [Euro]',
+       'GrDP (Territorial & Central GHG with VOLY) scenario [Euro]',
+       'GrDP (Territorial & Central GHG with VSL) scenario [Euro]',
+       'GrDP (Territorial & High GHG with VOLY) scenario [Euro]',
+       'GrDP (Territorial & High GHG with VSL) scenario [Euro]',
+       'GrDP (Residential & Low GHG with VOLY) scenario [Euro]',
+       'GrDP (Residential & Low GHG with VSL) scenario [Euro]',
+       'GrDP (Residential & Central GHG with VOLY) scenario [Euro]',
+       'GrDP (Residential & Central GHG with VSL) scenario [Euro]',
+       'GrDP (Residential & High GHG with VOLY) scenario [Euro]',
+       'GrDP (Residential & High GHG with VSL) scenario [Euro]',
+       'GrDP (Footprint & Low GHG with VOLY) scenario [Euro]',
+       'GrDP (Footprint & Low GHG with VSL) scenario [Euro]',
+       'GrDP (Footprint & Central GHG with VOLY) scenario [Euro]',
+       'GrDP (Footprint & Central GHG with VSL) scenario [Euro]',
+       'GrDP (Footprint & High GHG with VOLY) scenario [Euro]',
+       'GrDP (Footprint & High GHG with VSL) scenario [Euro]', 'GrDP per capita (Territorial & Low GHG with VOLY) scenario [Euro]',
+   'GrDP per capita (Territorial & Low GHG with VSL) scenario [Euro]',
+   'GrDP per capita (Territorial & Central GHG with VOLY) scenario [Euro]',
+   'GrDP per capita (Territorial & Central GHG with VSL) scenario [Euro]',
+   'GrDP per capita (Territorial & High GHG with VOLY) scenario [Euro]',
+   'GrDP per capita (Territorial & High GHG with VSL) scenario [Euro]',
+   'GrDP per capita (Residential & Low GHG with VOLY) scenario [Euro]',
+   'GrDP per capita (Residential & Low GHG with VSL) scenario [Euro]',
+   'GrDP per capita (Residential & Central GHG with VOLY) scenario [Euro]',
+   'GrDP per capita (Residential & Central GHG with VSL) scenario [Euro]',
+   'GrDP per capita (Residential & High GHG with VOLY) scenario [Euro]',
+   'GrDP per capita (Residential & High GHG with VSL) scenario [Euro]',
+   'GrDP per capita (Footprint & Low GHG with VOLY) scenario [Euro]',
+   'GrDP per capita (Footprint & Low GHG with VSL) scenario [Euro]',
+   'GrDP per capita (Footprint & Central GHG with VOLY) scenario [Euro]',
+   'GrDP per capita (Footprint & Central GHG with VSL) scenario [Euro]',
+   'GrDP per capita (Footprint & High GHG with VOLY) scenario [Euro]',
+   'GrDP per capita (Footprint & High GHG with VSL) scenario [Euro]']]
+GDP_data = GrDP.loc[:, ['countries', 'Year', 'GDP per capita [Euro]']]
+GDP_data = GrDP.loc[:, ['countries', 'Year', 'GDP [Euro]', 'GDP per capita [Euro]']]
+GrDP_list = ['Territorial & Low GHG with VOLY', 'Territorial & Low GHG with VSL', 'Territorial & Central GHG with VOLY', 'Territorial & Central GHG with VSL', 'Territorial & High GHG with VOLY', 'Territorial & High GHG with VSL', 'Residential & Low GHG with VOLY', 'Residential & Low GHG with VSL', 'Residential & Central GHG with VOLY', 'Residential & Central GHG with VSL', 'Residential & High GHG with VOLY', 'Residential & High GHG with VSL', 'Footprint & Low GHG with VOLY', 'Footprint & Low GHG with VSL', 'Footprint & Central GHG with VOLY', 'Footprint & Central GHG with VSL', 'Footprint & High GHG with VOLY', 'Footprint & High GHG with VSL']
+default_GrDP = 'Territorial & Central GHG with VSL'
+unique_countries_GrDP = GrDP_data['countries'].unique()
+default_country_GrDP = 'Switzerland'
+selected_GrDP = st.selectbox("Select a scenario:", GrDP_list, index=GrDP_list.index(default_GrDP))
 
-if selected_metric == 'Total':
-    # Option to select graph
-    options_GrDP = ['Evolution GDP and GrDP', 'Map', 'Table']
-    selected_option_GrDP = st.radio("Select display option:", options_GrDP, key="radio_total")
-
-    # Select GrDP and GDP data 
-    GrDP_data = GrDP.loc[:, ['countries', 'Year', 'GrDP (Territorial & Low GHG with VOLY) scenario [Euro]',
-           'GrDP (Territorial & Low GHG with VSL) scenario [Euro]',
-           'GrDP (Territorial & Central GHG with VOLY) scenario [Euro]',
-           'GrDP (Territorial & Central GHG with VSL) scenario [Euro]',
-           'GrDP (Territorial & High GHG with VOLY) scenario [Euro]',
-           'GrDP (Territorial & High GHG with VSL) scenario [Euro]',
-           'GrDP (Residential & Low GHG with VOLY) scenario [Euro]',
-           'GrDP (Residential & Low GHG with VSL) scenario [Euro]',
-           'GrDP (Residential & Central GHG with VOLY) scenario [Euro]',
-           'GrDP (Residential & Central GHG with VSL) scenario [Euro]',
-           'GrDP (Residential & High GHG with VOLY) scenario [Euro]',
-           'GrDP (Residential & High GHG with VSL) scenario [Euro]',
-           'GrDP (Footprint & Low GHG with VOLY) scenario [Euro]',
-           'GrDP (Footprint & Low GHG with VSL) scenario [Euro]',
-           'GrDP (Footprint & Central GHG with VOLY) scenario [Euro]',
-           'GrDP (Footprint & Central GHG with VSL) scenario [Euro]',
-           'GrDP (Footprint & High GHG with VOLY) scenario [Euro]',
-           'GrDP (Footprint & High GHG with VSL) scenario [Euro]']]
-    GDP_data = GrDP.loc[:, ['countries', 'Year', 'GDP [Euro]']]
-    GrDP_list = ['Territorial & Low GHG with VOLY', 'Territorial & Low GHG with VSL', 'Territorial & Central GHG with VOLY', 'Territorial & Central GHG with VSL', 'Territorial & High GHG with VOLY', 'Territorial & High GHG with VSL', 'Residential & Low GHG with VOLY', 'Residential & Low GHG with VSL', 'Residential & Central GHG with VOLY', 'Residential & Central GHG with VSL', 'Residential & High GHG with VOLY', 'Residential & High GHG with VSL', 'Footprint & Low GHG with VOLY', 'Footprint & Low GHG with VSL', 'Footprint & Central GHG with VOLY', 'Footprint & Central GHG with VSL', 'Footprint & High GHG with VOLY', 'Footprint & High GHG with VSL']
-    default_GrDP = 'Territorial & Central GHG with VSL'
-    unique_countries_GrDP = GrDP_data['countries'].unique()
-    default_country_GrDP = 'Switzerland'
-    selected_GrDP = st.selectbox("Select a scenario:", GrDP_list, index=GrDP_list.index(default_GrDP))
-    selected_GrDP_col = 'GrDP (' + selected_GrDP + ') scenario [Euro]'
-
-    # Depending on the selected option, display the corresponding content
-    if selected_option_GrDP == 'Evolution GDP and GrDP':     # Plot of the evolution of GDP and GrDP
-        # Selection of country
-        selected_country_GrDP = st.selectbox("Select a country:", unique_countries_GrDP, index=list(unique_countries_GrDP).index(default_country_GrDP), key='country_GrDP_selectbox')
-        # Filter data based on selected country
-        country_data_GrDP = GrDP_data.loc[GrDP_data['countries'] == selected_country_GrDP, ['Year', selected_GrDP_col]]
-        country_data_GDP = GDP_data.loc[GDP_data['countries'] == selected_country_GrDP, ['Year', 'GDP [Euro]']]
-        # Create traces for different emissions
-        traces_GrDP = [
-            go.Scatter(x=country_data_GDP['Year'], y=country_data_GDP['GDP [Euro]'], mode='lines', name='GDP'),
-            go.Scatter(x=country_data_GrDP['Year'], y=country_data_GrDP[selected_GrDP_col], mode='lines', name='GrDP')
-        ]
+# Depending on the selected option, display the corresponding content
+if selected_option_GrDP == 'Evolution GDP and GrDP':     # Plot of the evolution of GDP and GrDP
+    # Selection of country
+    selected_country_GrDP = st.selectbox("Select a country:", unique_countries_GrDP, index=list(unique_countries_GrDP).index(default_country_GrDP), key='country_GrDP_selectbox')
+        # Option to select between 'Total' and 'Per capita'
+    options_metric = ['Total', 'Per capita']
+    selected_metric = st.selectbox("Select metric:", options_metric, key="radio_metric_GrDP")
+    if selected_metric == 'Total':
+        selected_GrDP_col = 'GrDP (' + selected_GrDP + ') scenario [Euro]'
+        selected_GDP_col = 'GDP [Euro]'
         # Create layout
         layout_GrDP = go.Layout(
-            title=f'GrDP ({selected_GrDP} scenario) and GDP of {selected_country_GrDP}',
-            xaxis=dict(title='Year'),
-            yaxis=dict(title='Euro', rangemode='tozero'),  # Fix minimum y-axis value at zero
-            margin=dict(l=40, r=40, t=40, b=30)
+        title=f'GrDP ({selected_GrDP} scenario) and GDP of {selected_country_GrDP}',
+        xaxis=dict(title='Year'),
+        yaxis=dict(title='Euro', rangemode='tozero'),  # Fix minimum y-axis value at zero
+        margin=dict(l=40, r=40, t=40, b=30)
         )
-        # Plot graph
-        st.plotly_chart({'data': traces_GrDP, 'layout': layout_GrDP}, use_container_width=True)
-    elif selected_option_GrDP == 'Map':            # Map of European countries
-        # Define function to plot map
-        def plot_map_GrDP(column):
-            # Create map
-            fig = px.choropleth(GrDP_data,
-                                locations='countries',
-                                locationmode='country names',
-                                color=column,
-                                hover_name='countries',
-                                animation_frame='Year',
-                                title="",
-                                color_continuous_scale=px.colors.sequential.Oranges,
-                                range_color=(0, GrDP_data[column].max()),
-                                scope='europe',
-                                height=600,
-                                width=800)
-            # Update Layout
-            fig.update_coloraxes(colorbar_title='GrDP [Euro]')
-            fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-            fig.update_geos(projection_scale=1) 
-            # Display plotly chart
-            st.plotly_chart(fig, use_container_width=True)
-        plot_map_GrDP(selected_GrDP_col)
-    elif selected_option_GrDP == 'Table':   # Dataframe with data
-        all_countries_option = "All countries"
-        selected_countries = st.multiselect("Select countries:", [all_countries_option] + list(unique_countries_GrDP), default=all_countries_option)
-        if all_countries_option in selected_countries:
-            filtered_data = GrDP_data.copy()  # Make a copy of the original DataFrame
-        else:
-            filtered_data = GrDP_data[GrDP_data['countries'].isin(selected_countries)]
-        st.write(filtered_data)
-else:
-    # Option to select graph
-    options_GrDP = ['Evolution GDP and GrDP per capita', 'Map', 'Table']
-    selected_option_GrDP = st.radio("Select display option:", options_GrDP, key="radio_per_capita")
-
-    # Select GrDP and GDP data 
-    GrDP_data = GrDP.loc[:, ['countries', 'Year', 'GrDP per capita (Territorial & Low GHG with VOLY) scenario [Euro]',
-       'GrDP per capita (Territorial & Low GHG with VSL) scenario [Euro]',
-       'GrDP per capita (Territorial & Central GHG with VOLY) scenario [Euro]',
-       'GrDP per capita (Territorial & Central GHG with VSL) scenario [Euro]',
-       'GrDP per capita (Territorial & High GHG with VOLY) scenario [Euro]',
-       'GrDP per capita (Territorial & High GHG with VSL) scenario [Euro]',
-       'GrDP per capita (Residential & Low GHG with VOLY) scenario [Euro]',
-       'GrDP per capita (Residential & Low GHG with VSL) scenario [Euro]',
-       'GrDP per capita (Residential & Central GHG with VOLY) scenario [Euro]',
-       'GrDP per capita (Residential & Central GHG with VSL) scenario [Euro]',
-       'GrDP per capita (Residential & High GHG with VOLY) scenario [Euro]',
-       'GrDP per capita (Residential & High GHG with VSL) scenario [Euro]',
-       'GrDP per capita (Footprint & Low GHG with VOLY) scenario [Euro]',
-       'GrDP per capita (Footprint & Low GHG with VSL) scenario [Euro]',
-       'GrDP per capita (Footprint & Central GHG with VOLY) scenario [Euro]',
-       'GrDP per capita (Footprint & Central GHG with VSL) scenario [Euro]',
-       'GrDP per capita (Footprint & High GHG with VOLY) scenario [Euro]',
-       'GrDP per capita (Footprint & High GHG with VSL) scenario [Euro]']]
-    GDP_data = GrDP.loc[:, ['countries', 'Year', 'GDP per capita [Euro]']]
-    GrDP_list = ['Territorial & Low GHG with VOLY', 'Territorial & Low GHG with VSL', 'Territorial & Central GHG with VOLY', 'Territorial & Central GHG with VSL', 'Territorial & High GHG with VOLY', 'Territorial & High GHG with VSL', 'Residential & Low GHG with VOLY', 'Residential & Low GHG with VSL', 'Residential & Central GHG with VOLY', 'Residential & Central GHG with VSL', 'Residential & High GHG with VOLY', 'Residential & High GHG with VSL', 'Footprint & Low GHG with VOLY', 'Footprint & Low GHG with VSL', 'Footprint & Central GHG with VOLY', 'Footprint & Central GHG with VSL', 'Footprint & High GHG with VOLY', 'Footprint & High GHG with VSL']
-    default_GrDP = 'Territorial & Central GHG with VSL'
-    unique_countries_GrDP = GrDP_data['countries'].unique()
-    default_country_GrDP = 'Switzerland'
-    selected_GrDP = st.selectbox("Select a scenario:", GrDP_list, index=GrDP_list.index(default_GrDP))
-    selected_GrDP_col = 'GrDP per capita (' + selected_GrDP + ') scenario [Euro]'
-
-    # Depending on the selected option, display the corresponding content
-    if selected_option_GrDP == 'Evolution GDP and GrDP per capita':     # Plot of the evolution of GDP and GrDP
-        # Selection of country
-        selected_country_GrDP = st.selectbox("Select a country:", unique_countries_GrDP, index=list(unique_countries_GrDP).index(default_country_GrDP), key='country_GrDP_selectbox')
-        # Filter data based on selected country
-        country_data_GrDP = GrDP_data.loc[GrDP_data['countries'] == selected_country_GrDP, ['Year', selected_GrDP_col]]
-        country_data_GDP = GDP_data.loc[GDP_data['countries'] == selected_country_GrDP, ['Year', 'GDP per capita [Euro]']]
-        # Create traces for different emissions
-        traces_GrDP = [
-            go.Scatter(x=country_data_GDP['Year'], y=country_data_GDP['GDP per capita [Euro]'], mode='lines', name='GDP per capita'),
-            go.Scatter(x=country_data_GrDP['Year'], y=country_data_GrDP[selected_GrDP_col], mode='lines', name='GrDP per capita')
-        ]
+    else:
+        selected_GrDP_col = 'GrDP per capita (' + selected_GrDP + ') scenario [Euro]'
+        selected_GDP_col = 'GDP per capita [Euro]'
         # Create layout
         layout_GrDP = go.Layout(
-            title=f'GrDP ({selected_GrDP} scenario) and GDP per capita of {selected_country_GrDP}',
-            xaxis=dict(title='Year'),
-            yaxis=dict(title='Euro', rangemode='tozero'),  # Fix minimum y-axis value at zero
-            margin=dict(l=40, r=40, t=40, b=30)
+        title=f'GrDP per capita ({selected_GrDP} scenario) and GDP per capita of {selected_country_GrDP}',
+        xaxis=dict(title='Year'),
+        yaxis=dict(title='Euro', rangemode='tozero'),  # Fix minimum y-axis value at zero
+        margin=dict(l=40, r=40, t=40, b=30)
         )
-        # Plot graph
-        st.plotly_chart({'data': traces_GrDP, 'layout': layout_GrDP}, use_container_width=True)
-    elif selected_option_GrDP == 'Map':            # Map of European countries
-        # Define function to plot map
-        def plot_map_GrDP(column):
-            # Create map
-            fig = px.choropleth(GrDP_data,
-                                locations='countries',
-                                locationmode='country names',
-                                color=column,
-                                hover_name='countries',
-                                animation_frame='Year',
-                                title="",
-                                color_continuous_scale=px.colors.sequential.Oranges,
-                                range_color=(0, GrDP_data[column].max()),
-                                scope='europe',
-                                height=600,
-                                width=800)
-            # Update Layout
-            fig.update_coloraxes(colorbar_title='GrDP per capita [Euro]')
-            fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-            fig.update_geos(projection_scale=1) 
-            # Display plotly chart
-            st.plotly_chart(fig, use_container_width=True)
-        plot_map_GrDP(selected_GrDP_col)
-    elif selected_option_GrDP == 'Table':   # Dataframe with data
-        all_countries_option = "All countries"
-        selected_countries = st.multiselect("Select countries:", [all_countries_option] + list(unique_countries_GrDP), default=all_countries_option)
-        if all_countries_option in selected_countries:
-            filtered_data = GrDP_data.copy()  # Make a copy of the original DataFrame
-        else:
-            filtered_data = GrDP_data[GrDP_data['countries'].isin(selected_countries)]
-        st.write(filtered_data)
+    # Filter data based on selected country
+    country_data_GrDP = GrDP_data.loc[GrDP_data['countries'] == selected_country_GrDP, ['Year', selected_GrDP_col]]
+    country_data_GDP = GDP_data.loc[GDP_data['countries'] == selected_country_GrDP, ['Year', selected_GDP_col]]
+    # Create traces for different emissions
+    traces_GrDP = [
+        go.Scatter(x=country_data_GDP['Year'], y=country_data_GDP[selected_GDP_col], mode='lines', name='GDP'),
+        go.Scatter(x=country_data_GrDP['Year'], y=country_data_GrDP[selected_GrDP_col], mode='lines', name='GrDP')
+    ]
+    # Plot graph
+    st.plotly_chart({'data': traces_GrDP, 'layout': layout_GrDP}, use_container_width=True)
+elif selected_option_GrDP == 'Map': # Map of European countries
+    # Option to select between 'Total' and 'Per capita'
+    options_metric = ['Per capita', 'Total']
+    selected_metric = st.selectbox("Select metric:", options_metric, key="radio_metric_GrDP")
+    if selected_metric == 'Total':
+        selected_GrDP_col = 'GrDP (' + selected_GrDP + ') scenario [Euro]'
+        title_GrDP = 'GrDP [Euro]'
+    else:
+        selected_GrDP_col = 'GrDP per capita (' + selected_GrDP + ') scenario [Euro]'
+        title_GrDP = 'GrDP per capita [Euro]'
+    # Define function to plot map
+    def plot_map_GrDP(column):
+        # Define the min and max values for the color range per year
+        GrDP_data['min_value'] = GrDP_data.groupby('Year')[column].transform('min')
+        GrDP_data['max_value'] = GrDP_data.groupby('Year')[column].transform('max')
+
+        # Create map
+        fig = px.choropleth(GrDP_data,
+                            locations='countries',
+                            locationmode='country names',
+                            color=column,
+                            hover_name='countries',
+                            animation_frame='Year',
+                            title="",
+                            color_continuous_scale=px.colors.sequential.Oranges,
+                            scope='europe',
+                            height=600,
+                            width=800)
+
+        # Adjust the color range for each frame
+        for frame in fig.frames:
+            year = frame.name
+            year_data = GrDP_data[GrDP_data['Year'] == year]
+
+            # Check if the slice is not empty
+            if not year_data.empty:
+                min_value = GrDP_data['min_value'].iloc[0]
+                max_value = GrDP_data['max_value'].iloc[0]
+                frame.data[0].zmin = min_value
+                frame.data[0].zmax = max_value
+            else:
+                # Set default min and max if data is not available for the year
+                frame.data[0].zmin = GrDP_data[column].min()
+                frame.data[0].zmax = GrDP_data[column].max()
         
+        # Update Layout
+        fig.update_coloraxes(colorbar_title=title_GrDP)
+        fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+        fig.update_geos(projection_scale=1)
+
+        # Display plotly chart
+        st.plotly_chart(fig, use_container_width=True)
+        
+    plot_map_GrDP(selected_GrDP_col)
+elif selected_option_GrDP == 'Table':   # Dataframe with data
+    all_countries_option = "All countries"
+    selected_countries = st.multiselect("Select countries:", [all_countries_option] + list(unique_countries_GrDP), default=all_countries_option, key='Table_GrDP')
+    if all_countries_option in selected_countries:
+        filtered_data = GrDP_data.copy()  # Make a copy of the original DataFrame
+    else:
+        filtered_data = GrDP_data[GrDP_data['countries'].isin(selected_countries)]
+    st.write(filtered_data)
+    
 ###########################################################
 ##### Can we decouple economic growth and pollution ######
 #########################################################
 
 # Section: Decoupling
 st.header("Can we decouple economic growth and pollution?")
+
+st.write("##### What is decoupling ?")
+
+st.write("According to the [OECD](https://one.oecd.org/document/sg/sd(2002)1/final/en/pdf):")
+
+st.markdown("> Decoupling occurs when the growth rate of an environmental pressure is less than that of its economic driving force (e.g. GDP) over a given period.") 
+
+st.markdown("""
+This interactive chart illustrates the decoupling between economic growth (represented by GDP) and pollution (represented by emissions of various pollutants). We use two indicators to evaluate decoupling: the OECD indicator and the Intensity of Decoupling Factor.
+
+##### OECD Indicator (D)
+
+The OECD indicator can be interpreted as follows:
+- **D < 0**: No decoupling
+- **0 < D < 1**: Decoupling
+- **D = 1**: Emissions = 0
+- **D > 1**: Negative emissions
+
+##### Intensity of Decoupling Factor (IF)
+
+The Intensity of Decoupling Factor distinguishes between relative and absolute decoupling:
+- **IF < -1**: No decoupling
+- **-1 < IF < 0**: Relative decoupling
+- **IF > 0**: Absolute decoupling
+
+##### Types of Decoupling
+
+- **Relative Decoupling**: Environmental impact continues to grow but at a slower rate compared to economic growth.
+- **Absolute Decoupling**: Environmental impact decreases even as the economy grows.
+""")
 
 ##########################################
 ################ Bar Plot ################
@@ -687,7 +721,7 @@ if selected_option_Decoupling == 'Bar plot':
             "Select a scenario:", Emissions_list, index=Emissions_list.index(default_emission_decoupling)
         )
         selected_Decoupling_col = selected_emission_decoupling + '_GDP'
-        Indicator_list = ['OECD', 'Intensity Factor']
+        Indicator_list = ['OECD', 'Intensity of Decoupling Factor']
         default_indicator = 'OECD'
         selected_indicator = st.selectbox(
             "Select an indicator:", Indicator_list, index=Indicator_list.index(default_indicator)
@@ -744,7 +778,9 @@ if selected_option_Decoupling == 'Bar plot':
             'Cd_Population',
             'Hg_Population',
             'Cr_Population',
-            'Ni_Population'
+            'Ni_Population',
+            'Heavy Metals Emissions_Population',
+            'Air Pollutants Emissions_Population'
         ]]
         Decoupling_Intensity_Factor_data = Decoupling_Intensity_Factor.loc[:, [
             'countries', 'Year', 'Territorial GHG emissions_Population',
@@ -762,7 +798,9 @@ if selected_option_Decoupling == 'Bar plot':
             'Cd_Population',
             'Hg_Population',
             'Cr_Population',
-            'Ni_Population'
+            'Ni_Population',
+            'Heavy Metals Emissions_Population',
+            'Air Pollutants Emissions_Population'
         ]]
 
         Emissions_list = [
@@ -775,7 +813,7 @@ if selected_option_Decoupling == 'Bar plot':
             "Select a scenario:", Emissions_list, index=Emissions_list.index(default_emission_decoupling)
         )
         selected_Decoupling_col = selected_emission_decoupling + '_Population'
-        Indicator_list = ['OECD', 'Intensity Factor']
+        Indicator_list = ['OECD', 'Intensity of Decoupling Factor']
         default_indicator = 'OECD'
         selected_indicator = st.selectbox(
             "Select an indicator:", Indicator_list, index=Indicator_list.index(default_indicator)
@@ -814,7 +852,7 @@ if selected_option_Decoupling == 'Bar plot':
         st.plotly_chart({'data': Bar_plot_decoupling, 'layout': layout_decoupling}, use_container_width=True)
 
 elif selected_option_Decoupling == 'Table':
-    options = ['OECD', 'Intensity Factor']
+    options = ['OECD', 'Intensity of Decoupling Factor']
     selected_indicator_table = st.selectbox("Select indicator:", options, key="dropdown_quantity_decoupling_table")
     
     if selected_indicator_table == 'OECD':
@@ -839,7 +877,9 @@ elif selected_option_Decoupling == 'Table':
             'Cd_Population',
             'Hg_Population',
             'Cr_Population',
-            'Ni_Population'
+            'Ni_Population',
+            'Heavy Metals Emissions_Population',
+            'Air Pollutants Emissions_Population'
         ]]
 
         all_countries_option = "All countries"
@@ -873,7 +913,9 @@ elif selected_option_Decoupling == 'Table':
             'Cd_Population',
             'Hg_Population',
             'Cr_Population',
-            'Ni_Population'
+            'Ni_Population',
+            'Heavy Metals Emissions_Population',
+            'Air Pollutants Emissions_Population'
         ]]
 
         all_countries_option = "All countries"
@@ -889,6 +931,27 @@ elif selected_option_Decoupling == 'Table':
 ##############################################
 ################ Scatter Plot ################
 ##############################################
+
+st.markdown("""
+This interactive chart that plots the relative differences in emissions (ΔEmissions) and GDP (ΔGDP) distinguishes even more forms of decoupling:
+
+- **Strong Negative Decoupling**: Emissions decrease proportionally more than GDP decreases.
+
+- **Weak Negative Decoupling**: Emissions decrease less than GDP decreases.
+
+- **Recessive Coupling**: Emissions decrease at a rate similar to or slightly more than GDP decreases.
+
+- **Recessive Decoupling**: Emissions decrease much more than GDP decreases.
+
+- **Weak Decoupling**: Emissions remain stable or decrease slightly, while GDP increases.
+
+- **Expansive Negative Decoupling**: Emissions increase much more than GDP increases.
+
+- **Expansive Coupling**: Emissions increase at a rate similar to GDP increases.
+
+- **Strong Decoupling**: Emissions decrease proportionally more than GDP increases.
+
+""")
 
 import pandas as pd
 import plotly.graph_objs as go
@@ -1024,7 +1087,7 @@ if selected_option_RelDif == 'Scatter plot':
                 x1=x_axis_max,
                 y1=0,
                 line=dict(
-                    color="white",
+                    color="grey",
                     width=0.5
                 )
             ),
@@ -1036,7 +1099,7 @@ if selected_option_RelDif == 'Scatter plot':
                 x1=0,
                 y1=y_axis_max,
                 line=dict(
-                    color="white",
+                    color="grey",
                     width=0.5
                 )
             )
@@ -1054,9 +1117,10 @@ if selected_option_RelDif == 'Scatter plot':
 elif selected_option_RelDif == 'Table':
     all_countries_option = "All countries"
     unique_countries_RelDif = RelDif_data['countries'].unique()
-    selected_countries = st.multiselect("Select countries:", [all_countries_option] + list(unique_countries_RelDif), default=all_countries_option)
+    selected_countries = st.multiselect("Select countries:", [all_countries_option] + list(unique_countries_RelDif), default=all_countries_option, key='Table_RelDif')
     if all_countries_option in selected_countries:
         filtered_data = RelDif_data.copy()  # Make a copy of the original DataFrame
     else:
         filtered_data = RelDif_data[RelDif_data['countries'].isin(selected_countries)]
     st.write(filtered_data)
+

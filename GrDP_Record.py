@@ -6,6 +6,9 @@ import plotly.express as px
 import seaborn as sns
 import re
 
+# Set seaborn theme
+sns.set_theme()
+
 # Load data
 Emissions = pd.read_csv('https://raw.githubusercontent.com/AntoineTrabia/Green-Domestic-Product/main/data_final/Emissions.csv')
 External_costs = pd.read_csv('https://raw.githubusercontent.com/AntoineTrabia/Green-Domestic-Product/main/data_final/ExternalCosts.csv')
@@ -64,7 +67,6 @@ st.markdown("> What we measure affects what we do; and if our measurements are f
 st.markdown("<div style='text-align: right;'> Stiglitz, Sen, Fitoussi et al., 2009. <a href='https://ec.europa.eu/eurostat/documents/8131721/8131772/Stiglitz-Sen-Fitoussi-Commission-report.pdf'>Report by the Commission on the Measurement of Economic Performance and Social Progress</a>. p7</div>", unsafe_allow_html=True)
 
 st.markdown("""
-
 With E4S, we propose a novel indicator, the Green Domestic Product (GrDP), to remedy some of the shortcomings of GDP. The GrDP is calculated by subtracting the external costs associated with producing goods and services from the standard measurement of GDP. The current scope of the GrDP includes the emissions of greenhouse gases (GHG), air pollutants, and heavy metals. The impacts covered include climate change, health issues, decrease in crops’ yields and biomass production, buildings degradation, and damages to ecosystems due to eutrophication. You can learn more about the GrDP, including a detailed description of the method used, data scources, and assumptions, on the [E4S webpage Green Domestic Product](https://e4s.center/resources/reports/green-domestic-product/). 
 """)
 
@@ -130,13 +132,10 @@ if selected_option == 'Evolution of GHG emissions':     # Plot of the evolution 
     country_data = GHG_data[GHG_data['countries'] == selected_country]
     # Create traces for different emissions
     traces = [
-    go.Scatter(x=country_data['Year'], y=country_data['Territorial GHG emissions [t]'], mode='lines', name='Territorial Emissions',
-               line=dict(color='rgb(31, 119, 180)')),  # Blue
-    go.Scatter(x=country_data['Year'], y=country_data['Residential GHG emissions [t]'], mode='lines', name='Residential Emissions',
-               line=dict(color='rgb(255, 127, 14)')),  # Orange
-    go.Scatter(x=country_data['Year'], y=country_data['Footprint GHG emissions [t]'], mode='lines', name='Footprint Emissions',
-               line=dict(color='rgb(44, 160, 44)'))  # Green
-]
+        go.Scatter(x=country_data['Year'], y=country_data['Territorial GHG emissions [t]'], mode='lines', name='Territorial Emissions'),
+        go.Scatter(x=country_data['Year'], y=country_data['Residential GHG emissions [t]'], mode='lines', name='Residential Emissions'),
+        go.Scatter(x=country_data['Year'], y=country_data['Footprint GHG emissions [t]'], mode='lines', name='Footprint Emissions')
+    ]
     # Create layout
     layout = go.Layout(
         title=f'GHG emissions of {selected_country}',
@@ -309,7 +308,7 @@ elif selected_option_AP == 'Map': # Map of European countries
     plot_map_AP(selected_pollutant_col)
 elif selected_option_AP == 'Table':   # Dataframe with data
     all_countries_option = "All countries"
-    selected_countries = st.multiselect("Select countries:", [all_countries_option] + unique_countries, default=all_countries_option, key='table_air_pol')
+    selected_countries = st.multiselect("Select countries:", [all_countries_option] + unique_countries, default=all_countries_option)
     if all_countries_option in selected_countries:
         filtered_data = AP_data.copy()  # Make a copy of the original DataFrame
     else:
@@ -333,7 +332,7 @@ For the main air pollutants and heavy metals, we rely on the damage costs, i.e.,
 
 For greenhouse gases, we rely on avoidance costs, i.e., the costs to prevent externalities by decarbonizing, for two main reasons. First, damage costs are prone to significant uncertainties, with values from the literature ranging from a few euros to several thousand euros per ton of CO2. Second, international agreements have the goal to limit global temperature rise to 1.5-2°C above pre-industrial levels, thus preventing catastrophic climate change impacts. To account for uncertainties in the cost of decarbonization, we estimated the external costs with three values, taken from the European Commission report [Handbook on the external costs of transport (2020)](https://op.europa.eu/en/publication-detail/-/publication/9781f65f-8448-11ea-bf12-01aa75ed71a1/language-en): low (63 €/tCO2eq), central (104 €/tCO2eq), and high (524 €/tCO2eq).
 """)
-
+    
 # Option to select graph for external costs
 options_EC = ['Evolution of external costs', 'Map', 'Table']
 selected_option_EC = st.radio("Select display option:", options_EC, key="radio_EC")
@@ -377,7 +376,7 @@ EC_data = External_costs.loc[:, ['countries', 'Year', 'External costs (Territori
        '(Footprint & High GHG with VSL) scenario [%]']]
 EC_list = ['Territorial & Low GHG with VOLY', 'Territorial & Low GHG with VSL', 'Territorial & Central GHG with VOLY', 'Territorial & Central GHG with VSL', 'Territorial & High GHG with VOLY', 'Territorial & High GHG with VSL', 'Residential & Low GHG with VOLY', 'Residential & Low GHG with VSL', 'Residential & Central GHG with VOLY', 'Residential & Central GHG with VSL', 'Residential & High GHG with VOLY', 'Residential & High GHG with VSL', 'Footprint & Low GHG with VOLY', 'Footprint & Low GHG with VSL', 'Footprint & Central GHG with VOLY', 'Footprint & Central GHG with VSL', 'Footprint & High GHG with VOLY', 'Footprint & High GHG with VSL']
 default_scenario_EC = 'Territorial & Central GHG with VSL'
-unique_countries_EC = EC_data['countries'].unique()
+unique_countries_EC = External_costs.countries.unique()
 default_country_EC = 'Switzerland'
 selected_scenario_EC = st.selectbox("Select a scenario:", EC_list, index=EC_list.index(default_scenario_EC), key="select_scenario_EC")
 
@@ -473,12 +472,13 @@ elif selected_option_EC == 'Map':  # Map of European countries
     
 elif selected_option_EC == 'Table':  # Dataframe with data
     all_countries_option = "All countries"
-    selected_countries = st.multiselect("Select countries:", [all_countries_option] + list(unique_countries_EC), default=all_countries_option)
+    selected_countries = st.multiselect("Select countries:", [all_countries_option] + unique_countries_EC, default=all_countries_option, key='multi_country_EC')
     if all_countries_option in selected_countries:
-        filtered_data = EC_data.copy()  # Make a copy of the original DataFrame
+        filtered_data_EC = EC_data.copy()  # Make a copy of the original DataFrame
     else:
-        filtered_data = EC_data[EC_data['countries'].isin(selected_countries)]
-    st.write(filtered_data)
+        filtered_data_EC = EC_data[EC_data['countries'].isin(selected_countries)]
+    st.write(filtered_data_EC)
+
 
     
 ############################################
@@ -552,7 +552,6 @@ if selected_option_GrDP == 'Evolution GDP and GrDP':     # Plot of the evolution
     selected_metric = st.selectbox("Select metric:", options_metric, key="radio_metric_GrDP")
     if selected_metric == 'Total':
         selected_GrDP_col = 'GrDP (' + selected_GrDP + ') scenario [Euro]'
-        selected_GDP_col = 'GDP [Euro]'
         # Create layout
         layout_GrDP = go.Layout(
         title=f'GrDP ({selected_GrDP} scenario) and GDP of {selected_country_GrDP}',
@@ -562,7 +561,6 @@ if selected_option_GrDP == 'Evolution GDP and GrDP':     # Plot of the evolution
         )
     else:
         selected_GrDP_col = 'GrDP per capita (' + selected_GrDP + ') scenario [Euro]'
-        selected_GDP_col = 'GDP per capita [Euro]'
         # Create layout
         layout_GrDP = go.Layout(
         title=f'GrDP per capita ({selected_GrDP} scenario) and GDP per capita of {selected_country_GrDP}',
@@ -572,10 +570,10 @@ if selected_option_GrDP == 'Evolution GDP and GrDP':     # Plot of the evolution
         )
     # Filter data based on selected country
     country_data_GrDP = GrDP_data.loc[GrDP_data['countries'] == selected_country_GrDP, ['Year', selected_GrDP_col]]
-    country_data_GDP = GDP_data.loc[GDP_data['countries'] == selected_country_GrDP, ['Year', selected_GDP_col]]
+    country_data_GDP = GDP_data.loc[GDP_data['countries'] == selected_country_GrDP, ['Year', 'GDP [Euro]']]
     # Create traces for different emissions
     traces_GrDP = [
-        go.Scatter(x=country_data_GDP['Year'], y=country_data_GDP[selected_GDP_col], mode='lines', name='GDP'),
+        go.Scatter(x=country_data_GDP['Year'], y=country_data_GDP['GDP [Euro]'], mode='lines', name='GDP'),
         go.Scatter(x=country_data_GrDP['Year'], y=country_data_GrDP[selected_GrDP_col], mode='lines', name='GrDP')
     ]
     # Plot graph
@@ -636,7 +634,7 @@ elif selected_option_GrDP == 'Map': # Map of European countries
     plot_map_GrDP(selected_GrDP_col)
 elif selected_option_GrDP == 'Table':   # Dataframe with data
     all_countries_option = "All countries"
-    selected_countries = st.multiselect("Select countries:", [all_countries_option] + list(unique_countries_GrDP), default=all_countries_option, key='Table_GrDP')
+    selected_countries = st.multiselect("Select countries:", [all_countries_option] + list(unique_countries_GrDP), default=all_countries_option)
     if all_countries_option in selected_countries:
         filtered_data = GrDP_data.copy()  # Make a copy of the original DataFrame
     else:
@@ -778,9 +776,7 @@ if selected_option_Decoupling == 'Bar plot':
             'Cd_Population',
             'Hg_Population',
             'Cr_Population',
-            'Ni_Population',
-            'Heavy Metals Emissions_Population',
-            'Air Pollutants Emissions_Population'
+            'Ni_Population'
         ]]
         Decoupling_Intensity_Factor_data = Decoupling_Intensity_Factor.loc[:, [
             'countries', 'Year', 'Territorial GHG emissions_Population',
@@ -798,9 +794,7 @@ if selected_option_Decoupling == 'Bar plot':
             'Cd_Population',
             'Hg_Population',
             'Cr_Population',
-            'Ni_Population',
-            'Heavy Metals Emissions_Population',
-            'Air Pollutants Emissions_Population'
+            'Ni_Population'
         ]]
 
         Emissions_list = [
@@ -877,9 +871,7 @@ elif selected_option_Decoupling == 'Table':
             'Cd_Population',
             'Hg_Population',
             'Cr_Population',
-            'Ni_Population',
-            'Heavy Metals Emissions_Population',
-            'Air Pollutants Emissions_Population'
+            'Ni_Population'
         ]]
 
         all_countries_option = "All countries"
@@ -913,9 +905,7 @@ elif selected_option_Decoupling == 'Table':
             'Cd_Population',
             'Hg_Population',
             'Cr_Population',
-            'Ni_Population',
-            'Heavy Metals Emissions_Population',
-            'Air Pollutants Emissions_Population'
+            'Ni_Population'
         ]]
 
         all_countries_option = "All countries"
@@ -1087,7 +1077,7 @@ if selected_option_RelDif == 'Scatter plot':
                 x1=x_axis_max,
                 y1=0,
                 line=dict(
-                    color="grey",
+                    color="white",
                     width=0.5
                 )
             ),
@@ -1099,7 +1089,7 @@ if selected_option_RelDif == 'Scatter plot':
                 x1=0,
                 y1=y_axis_max,
                 line=dict(
-                    color="grey",
+                    color="white",
                     width=0.5
                 )
             )
@@ -1117,10 +1107,9 @@ if selected_option_RelDif == 'Scatter plot':
 elif selected_option_RelDif == 'Table':
     all_countries_option = "All countries"
     unique_countries_RelDif = RelDif_data['countries'].unique()
-    selected_countries = st.multiselect("Select countries:", [all_countries_option] + list(unique_countries_RelDif), default=all_countries_option, key='Table_RelDif')
+    selected_countries = st.multiselect("Select countries:", [all_countries_option] + list(unique_countries_RelDif), default=all_countries_option)
     if all_countries_option in selected_countries:
         filtered_data = RelDif_data.copy()  # Make a copy of the original DataFrame
     else:
         filtered_data = RelDif_data[RelDif_data['countries'].isin(selected_countries)]
     st.write(filtered_data)
-
